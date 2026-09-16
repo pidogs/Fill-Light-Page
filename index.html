@@ -8,16 +8,32 @@
     // apply saved color before anything renders
     (function () {
       try {
-        var monitors = JSON.parse(localStorage.getItem('filllight.monitors')) || [];
-        var w = screen.width, h = screen.height;
-        var m = monitors.find(function (m) {
-          return Math.abs(m.w - w) <= Math.max(m.w, w) * 0.10 &&
-                Math.abs(m.h - h) <= Math.max(m.h, h) * 0.10;
-        });
-        if (m && m.rgb) {
-          document.documentElement.style.backgroundColor = m.rgb;
+        // Check URL hash first (#<kelvin>)
+        var hash = window.location.hash.slice(1);
+        var k = parseInt(hash, 10);
+        if (k >= 1500 && k <= 9000) {
+          // Tanner Helland approximation (same as bottom script)
+          var kelvin = Math.min(Math.max(k, 1000), 40000) / 100;
+          var r, g, b;
+          if (kelvin <= 66) { r = 255; } else { r = 329.7 * Math.pow(kelvin - 60, -0.1332); }
+          if (kelvin <= 66) { g = 99.47 * Math.log(kelvin) - 161.12; } else { g = 288.12 * Math.pow(kelvin - 60, -0.0755); }
+          if (kelvin >= 66) { b = 255; } else if (kelvin <= 19) { b = 0; } else { b = 138.52 * Math.log(kelvin - 10) - 305.04; }
+          r = Math.min(Math.max(Math.round(r), 0), 255);
+          g = Math.min(Math.max(Math.round(g), 0), 255);
+          b = Math.min(Math.max(Math.round(b), 0), 255);
+          document.documentElement.style.backgroundColor = 'rgb(' + r + ', ' + g + ', ' + b + ')';
         } else {
-          document.documentElement.style.backgroundColor = 'rgb(255, 249, 253)';
+          var monitors = JSON.parse(localStorage.getItem('filllight.monitors')) || [];
+          var w = screen.width, h = screen.height;
+          var m = monitors.find(function (m) {
+            return Math.abs(m.w - w) <= Math.max(m.w, w) * 0.10 &&
+                  Math.abs(m.h - h) <= Math.max(m.h, h) * 0.10;
+          });
+          if (m && m.rgb) {
+            document.documentElement.style.backgroundColor = m.rgb;
+          } else {
+            document.documentElement.style.backgroundColor = 'rgb(255, 249, 253)';
+          }
         }
       } catch (e) {
         document.documentElement.style.backgroundColor = 'rgb(255, 249, 253)';
@@ -196,6 +212,7 @@
     root.style.backgroundColor = rgb;
     kelvinLabel.textContent = k + 'K';
     saveKelvin(k, rgb);
+    history.replaceState(null, '', '#' + k);
 
     const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
     const c = luminance > 140 ? 'rgba(0, 0, 0, 0.45)' : 'rgba(255, 255, 255, 0.55)';
@@ -206,10 +223,21 @@
 
   slider.addEventListener('input', update);
 
+  // Parse URL hash #<kelvin>
+  function getHashKelvin() {
+    try {
+      const hash = window.location.hash.slice(1);
+      const k = parseInt(hash, 10);
+      if (k >= 1500 && k <= 9000) return k;
+    } catch {}
+    return null;
+  }
+
   // Restore saved value on load, then apply
+  const hashK = getHashKelvin();
   const saved = getSaved();
-  slider.value = saved.k;
-  kelvinLabel.textContent = saved.k + 'K';
+  slider.value = hashK != null ? hashK : saved.k;
+  kelvinLabel.textContent = slider.value + 'K';
   update();
 
   const IDLE_MS = 2000;
