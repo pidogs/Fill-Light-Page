@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fill Light</title>
+  <script>
+    // apply saved color before anything renders
+    (function () {
+      try {
+        var monitors = JSON.parse(localStorage.getItem('filllight.monitors')) || [];
+        var w = screen.width, h = screen.height;
+        var m = monitors.find(function (m) {
+          return Math.abs(m.w - w) <= Math.max(m.w, w) * 0.10 &&
+                Math.abs(m.h - h) <= Math.max(m.h, h) * 0.10;
+        });
+        if (m && m.rgb) {
+          document.documentElement.style.backgroundColor = m.rgb;
+        } else {
+          document.documentElement.style.backgroundColor = 'rgb(255, 249, 253)';
+        }
+      } catch (e) {
+        document.documentElement.style.backgroundColor = 'rgb(255, 249, 253)';
+      }
+    })();
+  </script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: inherit;
+      cursor: none;
+    }
+    html.cursor-active, html.cursor-active body {
+      cursor: default;
+    }
+    #controls {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+      font-size: 12px;
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+    #controls.visible {
+      opacity: 1;
+    }
+    #temp {
+      width: 100px;
+      height: 2px;
+      cursor: pointer;
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 1px;
+      outline: none;
+    }
+    #temp::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--thumb, rgba(0, 0, 0, 0.6));
+      cursor: pointer;
+    }
+    #temp::-moz-range-thumb {
+      width: 10px;
+      height: 10px;
+      border: none;
+      border-radius: 50%;
+      background: var(--thumb, rgba(0, 0, 0, 0.6));
+      cursor: pointer;
+    }
+    #kelvin {
+      font-variant-numeric: tabular-nums;
+      user-select: none;
+      letter-spacing: 0.3px;
+    }
+    .hidden {
+      opacity: 0 !important;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+<div id="controls">
+  <input type="range" id="temp" min="1500" max="9000" step="50" value="6000" aria-label="Color temperature">
+  <span id="kelvin">6500K</span>
+</div>
+
+<script>
+  // Tanner Helland approximation
+  function kelvinToRGB(kelvin) {
+    kelvin = Math.min(Math.max(kelvin, 1000), 40000) / 100;
+    let r, g, b;
+
+    if (kelvin <= 66) {
+      r = 255;
+    } else {
+      r = 329.7 * Math.pow(kelvin - 60, -0.1332);
+    }
+
+    if (kelvin <= 66) {
+      g = 99.47 * Math.log(kelvin) - 161.12;
+    } else {
+      g = 288.12 * Math.pow(kelvin - 60, -0.0755);
+    }
+
+    if (kelvin >= 66) {
+      b = 255;
+    } else if (kelvin <= 19) {
+      b = 0;
+    } else {
+      b = 138.52 * Math.log(kelvin - 10) - 305.04;
+    }
+
+    return [
+      Math.min(Math.max(Math.round(r), 0), 255),
+      Math.min(Math.max(Math.round(g), 0), 255),
+      Math.min(Math.max(Math.round(b), 0), 255)
+    ];
+  }
+
+  const slider = document.getElementById('temp');
+  const kelvinLabel = document.getElementById('kelvin');
+  const controls = document.getElementById('controls');
+  const root = document.documentElement;
+
+  // ---- Per-monitor storage (screen resolution, ±10% tolerance) ----
+  const STORAGE_KEY = 'filllight.monitors';
+  const TOLERANCE = 0.10;
+
+  function loadMonitors() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveMonitors(list) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    } catch {}
+  }
+
+  function withinTenPct(a, b) {
+    return Math.abs(a - b) <= Math.max(a, b) * TOLERANCE;
+  }
+
+  function findMonitor(list) {
+    const w = screen.width;
+    const h = screen.height;
+    return list.find(
+      (m) => withinTenPct(m.w, w) && withinTenPct(m.h, h)
+    );
+  }
+
+  function getSaved() {
+    const monitor = findMonitor(loadMonitors());
+    if (monitor && monitor.k >= 1500 && monitor.k <= 9000) {
+      return { k: monitor.k, rgb: monitor.rgb };
+    }
+    return { k: 6500, rgb: 'rgb(255, 249, 253)' };
+  }
+
+  function saveKelvin(k, rgb) {
+    const list = loadMonitors();
+    const w = screen.width;
+    const h = screen.height;
+    const monitor = findMonitor(list);
+    if (monitor) {
+      monitor.w = w;
+      monitor.h = h;
+      monitor.k = k;
+      monitor.rgb = rgb;
+    } else {
+      list.push({ w, h, k, rgb });
+    }
+    saveMonitors(list);
+  }
+
+  function update() {
+    const k = parseInt(slider.value, 10);
+    const [r, g, b] = kelvinToRGB(k);
+    const rgb = `rgb(${r}, ${g}, ${b})`;
+
+    root.style.backgroundColor = rgb;
+    kelvinLabel.textContent = k + 'K';
+    saveKelvin(k, rgb);
+
+    const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const c = luminance > 140 ? 'rgba(0, 0, 0, 0.45)' : 'rgba(255, 255, 255, 0.55)';
+    controls.style.color = c;
+    slider.style.background = c;
+    slider.style.setProperty('--thumb', c);
+  }
+
+  slider.addEventListener('input', update);
+
+  // Restore saved value on load, then apply
+  const saved = getSaved();
+  slider.value = saved.k;
+  kelvinLabel.textContent = saved.k + 'K';
+  update();
+
+  const IDLE_MS = 2000;
+  let idleTimer = null;
+
+  function activity() {
+    // Show controls and cursor
+    controls.classList.add('visible');
+    root.classList.add('cursor-active');
+
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      controls.classList.remove('visible');
+      root.classList.remove('cursor-active');
+    }, IDLE_MS);
+  }
+
+  document.addEventListener('mousemove', activity);
+
+  // Keep visible while interacting with the slider
+  slider.addEventListener('pointerdown', () => {
+    clearTimeout(idleTimer);
+    const release = () => {
+      slider.removeEventListener('pointerup', release);
+      slider.removeEventListener('pointercancel', release);
+      activity();
+    };
+    slider.addEventListener('pointerup', release);
+    slider.addEventListener('pointercancel', release);
+  });
+
+  activity();
+</script>
+
+</body>
+</html>
