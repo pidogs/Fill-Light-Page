@@ -223,6 +223,16 @@
 
   slider.addEventListener('input', update);
 
+  // Scroll on slider to adjust temperature
+  slider.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    activity();
+    const step = parseInt(slider.step, 10) || 50;
+    const delta = e.deltaY > 0 ? -step : step;
+    slider.value = Math.min(Math.max(parseInt(slider.value, 10) + delta, parseInt(slider.min, 10)), parseInt(slider.max, 10));
+    update();
+  }, { passive: false });
+
   // Parse URL hash #<kelvin>
   function getHashKelvin() {
     try {
